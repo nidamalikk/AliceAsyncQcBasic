@@ -15,6 +15,9 @@
 using namespace o2::quality_control::core;
 
 std::string sessionID;
+std::string year;
+std::string period;
+std::string pass;
 
 //std::string CTPScalerSourceName{ "T0VTX" };
 std::string CTPScalerSourceName{ "ZNC-hadronic" };
@@ -35,7 +38,11 @@ struct PlotConfig
   std::string detectorName;
   std::string taskName;
   std::string plotName;
+  std::string plotLabel;
+  std::string projection;
   std::string drawOptions;
+  bool logx;
+  bool logy;
   double checkRangeMin;
   double checkRangeMax;
   double checkThreshold;
@@ -68,7 +75,11 @@ std::string getPlotOutputFilePrefix(const PlotConfig& plotConfig)
 {
   std::string plotNameWithDashes = plotConfig.plotName;
   std::replace( plotNameWithDashes.begin(), plotNameWithDashes.end(), '/', '-');
-  std::string outputFileName = std::string("outputs/") + sessionID + "/" + plotConfig.detectorName + "-" + plotConfig.taskName + "-" + plotNameWithDashes;
+  std::string outputFileName = std::string("outputs/") + sessionID + "/" + year + "/" + period + "/" + pass + "/" + plotConfig.detectorName + "-" + plotConfig.taskName + "-" + plotNameWithDashes;
+
+  if (!plotConfig.projection.empty()) {
+    outputFileName += std::string("-proj") + plotConfig.projection;
+  }
 
   return outputFileName;
 }
@@ -160,13 +171,26 @@ std::vector<std::shared_ptr<MonitorObject>> GetMOMW(TFile* f, const PlotConfig& 
   std::vector<std::shared_ptr<MonitorObject>> result;
 
   TDirectory* dir = GetDir(f, "mw");
+  if (!dir) {
+    std::cout << "Directory \"mw\" not found in ROOT file \"" << f->GetPath() << "\"" << std::endl;
+    return result;
+  }
   dir = GetDir(dir, plotConfig.detectorName.c_str());
+  if (!dir) {
+    std::cout << "Directory \"" << plotConfig.detectorName << "\" not found in ROOT file \"" << f->GetPath() << "\"" << std::endl;
+    return result;
+  }
   dir = GetDir(dir, plotConfig.taskName.c_str());
+  if (!dir) {
+    std::cout << "Directory \"" << plotConfig.taskName << "\" not found in ROOT file \"" << f->GetPath() << "\"" << std::endl;
+    return result;
+  }
   auto listOfKeys = dir->GetListOfKeys();
   for (int i = 0 ; i < listOfKeys->GetEntries(); ++i) {
     //std::cout<< "i: " << i << "  " << listOfKeys->At(i)->GetName() << std::endl;
     auto* moc = dynamic_cast<o2::quality_control::core::MonitorObjectCollection*>(dir->Get(listOfKeys->At(i)->GetName()));
     if (!moc) continue;
+    //std::cout << "Getting MO \"" << plotConfig.plotName << "\" from \"" << moc->GetName() << "\"" << std::endl;
     auto* moPtr = (MonitorObject*)moc->FindObject(plotConfig.plotName.c_str());
     //std::cout << "mo: " << moPtr << std::endl;
     if (!moPtr) continue;
@@ -621,12 +645,31 @@ void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<in
   c.SaveAs((outputFileName + ")").c_str());
 }
 
+double getNornalizationFactor(TH1* hist, double xmin, double xmax)
+{
+  if (xmin != xmax) {
+    int binMin = hist->GetXaxis()->FindBin(xmin);
+    int binMax = hist->GetXaxis()->FindBin(xmax);
+    return (1.0 / hist->Integral(binMin, binMax));
+  } else {
+    return (1.0 / hist->Integral());
+  }
+}
+
+void normalizeHistogram(TH1* hist, double xmin, double xmax)
+{
+  hist->Scale(getNornalizationFactor(hist, xmin, xmax));
+}
+
 void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
   double checkThreshold = plotConfig.checkThreshold;
   double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
+  bool logx = plotConfig.logx;
+  bool logy = plotConfig.logy;
+  auto projection = plotConfig.projection;
 
   int cW = 1800;
   int cH = 1200;
@@ -675,17 +718,54 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     int refRunNumber = getReferenceRunForRate(referenceRate);
     std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
 
+    // fill histogram with average of all histograms in the current IR interval
+    TH1* averageHist{ nullptr };
+    for (auto& mo : moVec) {
+      TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
+      if (!histTemp) continue;
+
+      if (projection == "x") {
+        TH2* h2 = dynamic_cast<TH2*>(histTemp);
+        if (h2) {
+          histTemp = (TH1*)h2->ProjectionX();
+        }
+      }
+      if (projection == "y") {
+        TH2* h2 = dynamic_cast<TH2*>(histTemp);
+        if (h2) {
+          histTemp = (TH1*)h2->ProjectionY();
+        }
+      }
+
+      if (!averageHist) {
+        averageHist = (TH1*)histTemp->Clone("_average");
+        normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+      } else {
+        averageHist->Add(histTemp, getNornalizationFactor(histTemp, checkRangeMin, checkRangeMax));
+      }
+    }
+    // normalize the average histogram
+    //if (averageHist) {
+    //  averageHist->Scale(1.0 / moVec.size());
+    //}
+
+
+    // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;
     if (referencePlots.count(index) > 0) {
       referenceHist = referencePlots[index];
-      if (checkRangeMin != checkRangeMax) {
+      //normalizeHistogram(referenceHist.get(), checkRangeMin, checkRangeMax);
+      /*if (checkRangeMin != checkRangeMax) {
         int binMin = referenceHist->GetXaxis()->FindBin(checkRangeMin);
         int binMax = referenceHist->GetXaxis()->FindBin(checkRangeMax);
         referenceHist->Scale(1.0 / referenceHist->Integral(binMin, binMax));
       } else {
         referenceHist->Scale(1.0 / referenceHist->Integral());
-      }
+      }*/
     }
+
+    TH1* denominatorHist = referenceHist ? referenceHist.get() : averageHist;
+    denominatorHist = averageHist;
 
     auto legend = new TLegend(0.05,0.1,0.95,0.9);
 
@@ -696,7 +776,33 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       //std::cout << "hist: " << hist << std::endl;
       if (!histTemp) continue;
 
+      if (projection == "x") {
+        TH2* h2 = dynamic_cast<TH2*>(histTemp);
+        if (h2) {
+          histTemp = (TH1*)h2->ProjectionX();
+        }
+      }
+      if (projection == "y") {
+        TH2* h2 = dynamic_cast<TH2*>(histTemp);
+        if (h2) {
+          histTemp = (TH1*)h2->ProjectionY();
+        }
+      }
+
       canvas.padTop->cd();
+
+      // log scales
+      if (logx) {
+        canvas.padTop->SetLogx(kTRUE);
+      } else {
+        canvas.padTop->SetLogx(kFALSE);
+      }
+      if (logy) {
+        canvas.padTop->SetLogy(kTRUE);
+      } else {
+        canvas.padTop->SetLogy(kFALSE);
+      }
+
       TH1* hist = (TH1*)histTemp->Clone("_clone");
 
       if (checkRangeMin != checkRangeMax) {
@@ -725,18 +831,35 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       else hist->Draw((plotConfig.drawOptions + " same").c_str());
 
       double fracBad = 0;
-      if (referenceHist) {
+      if (denominatorHist) {
         canvas.padBottom->cd();
+
+        // log scale
+        if (logx) {
+          canvas.padBottom->SetLogx(kTRUE);
+        } else {
+          canvas.padBottom->SetLogx(kFALSE);
+        }
+
         TH1* histRatio = (TH1*)histTemp->Clone("_ratio");
 
-        if (checkRangeMin != checkRangeMax) {
-          int binMin = histRatio->GetXaxis()->FindBin(checkRangeMin);
-          int binMax = histRatio->GetXaxis()->FindBin(checkRangeMax);
-          histRatio->Scale(1.0 / histRatio->Integral(binMin, binMax));
-        } else {
-          histRatio->Scale(1.0 / histRatio->Integral());
+        TH1* histReference = (TH1*)denominatorHist->Clone("_clone");
+        if (projection == "x") {
+          TH2* h2 = dynamic_cast<TH2*>(histReference);
+          if (h2) {
+            histReference = (TH1*)h2->ProjectionX();
+          }
         }
-        histRatio->Divide(referenceHist.get());
+        if (projection == "y") {
+          TH2* h2 = dynamic_cast<TH2*>(histReference);
+          if (h2) {
+            histReference = (TH1*)h2->ProjectionY();
+          }
+        }
+
+        normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
+        normalizeHistogram(histReference, checkRangeMin, checkRangeMax);
+        histRatio->Divide(histReference);
 
         histRatio->SetTitle("");
         histRatio->SetTitleSize(0);
@@ -795,25 +918,29 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       int secondMax = daTime.GetSecond();
 
       if (fracBad > chekMaxBadBinsFrac) {
-        std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": " << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data() << std::endl;
+        std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
+            << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
+            << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
+            << std::endl;
       }
 
-      TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
       if (mo->getActivity().mId == refRunNumber) {
+        TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
         lentry->SetTextColor(kGreen + 2);
       }
       if (fracBad > chekMaxBadBinsFrac) {
+        TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
         lentry->SetTextColor(kRed);
       }
 
       //legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
 
-    if (referenceHist) {
+    if (denominatorHist) {
       canvas.padBottom->cd();
 
-      double lineXmin = (checkRangeMin != checkRangeMax) ? checkRangeMin : referenceHist->GetXaxis()->GetXmin();
-      double lineXmax = (checkRangeMin != checkRangeMax) ? checkRangeMax : referenceHist->GetXaxis()->GetXmax();
+      double lineXmin = (checkRangeMin != checkRangeMax) ? checkRangeMin : denominatorHist->GetXaxis()->GetXmin();
+      double lineXmax = (checkRangeMin != checkRangeMax) ? checkRangeMax : denominatorHist->GetXaxis()->GetXmax();
       TLine* lineMin = new TLine(lineXmin, 1.0 - checkThreshold, lineXmax, 1.0 - checkThreshold);
       lineMin->SetLineColor(kRed);
       lineMin->SetLineStyle(7);
@@ -889,44 +1016,88 @@ void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<doub
 
   //c.cd();
   graphs.Draw("AL PMC PLC PFC");
-  graphs.SetTitle("ROF size vs. IR");
+  graphs.SetTitle(TString::Format("%s vs. IR", plotConfig.plotLabel.c_str()));
   graphs.GetXaxis()->SetTitle("IR (kHz)");
-  graphs.GetYaxis()->SetTitle("ROF Size (mean)");
+  graphs.GetYaxis()->SetTitle(TString::Format("%s (mean)", plotConfig.plotLabel.c_str()));
 
   legend->Draw();
   c.SaveAs(outputFileName.c_str());
 }
 
-void aqc_process(const char* rootFileList, const char* config)
+void aqc_process(const char* runsConfig, const char* plotsConfig)
 {
   gStyle->SetOptStat(0);
   gStyle->SetOptFit(1111);
   gStyle->SetPalette(57, 0);
   gStyle->SetNumberContours(40);
 
-  boost::property_tree::ptree jsontree;
-  boost::property_tree::read_json(config, jsontree);
+  boost::property_tree::ptree ptRuns;
+  boost::property_tree::read_json(runsConfig, ptRuns);
 
-  sessionID = jsontree.get<std::string>("id");
+  boost::property_tree::ptree ptPlots;
+  boost::property_tree::read_json(plotsConfig, ptPlots);
+
+  sessionID = ptPlots.get<std::string>("id");
   std::cout << "ID: " << sessionID << std::endl;
 
+  year = ptRuns.get<std::string>("year");
+  period = ptRuns.get<std::string>("period");
+  pass = ptRuns.get<std::string>("pass");
+
+  std::vector<int> runNumbers;
+  // input runs
+  auto inputRuns = ptRuns.get_child_optional("runs");
+  if (inputRuns.has_value()) {
+    std::cout << "inputRuns.size(): " << inputRuns.value().size() << std::endl;
+    for (const auto& inputRun : inputRuns.value()) {
+      runNumbers.push_back(inputRun.second.get_value<int>());
+    }
+  }
+
   // reference runs
-  auto referenceRuns = jsontree.get_child_optional("referenceRuns");
+  auto referenceRuns = ptRuns.get_child_optional("referenceRuns");
   if (referenceRuns.has_value()) {
     std::cout << "referenceRuns.size(): " << referenceRuns.value().size() << std::endl;
     for (const auto& referenceRun : referenceRuns.value()) {
       int run = referenceRun.second.get<int>("number");
       double rateMax = referenceRun.second.get<double>("rateMax");
       referenceRunsMap[rateMax] = run;
+      runNumbers.push_back(run);
     }
   } else {
     std::cout << "Key \"" << "referenceRuns" << "\" not found in configuration" << std::endl;
   }
 
+  // loading of ROOT files
+  std::vector<std::string> rootFileNames;
+  std::vector<std::shared_ptr<TFile>> rootFiles;
+  for (auto runNumber : runNumbers) {
+    //std::cout << "  run " << inputRun.second.get_value<int>() << std::endl;
+    std::string inputFilePath = std::string("inputs/") + year + "/" + period + "/" + pass + "/"
+        + std::to_string(runNumber) + "/";
+    TSystemDirectory inputDir("", inputFilePath.c_str());
+    //std::cout << "Listing contents of " << inputFilePath << std::endl;
+    TList* inputFiles = inputDir.GetListOfFiles();
+    if (!inputFiles) {
+      continue;
+    }
+    for (TObject* inputFile : (*inputFiles)) {
+      TString fname = inputFile->GetName();
+      if (fname.EndsWith(".root")) {
+        auto fullPath = inputFilePath + fname.Data();
+        std::cout << "Loading ROOT file " << fullPath << std::endl;
+        rootFileNames.push_back(fullPath);
+        rootFiles.push_back(std::make_shared<TFile>(fullPath.c_str()));
+      }
+    }
+  }
+
+  //return;
+
 
   // Plot configuration
   std::vector<PlotConfig> plotConfigs;
-  auto plotConfigsTree = jsontree.get_child_optional("plots");
+  auto plotConfigsTree = ptPlots.get_child_optional("plots");
   if (plotConfigsTree.has_value()) {
     std::cout << "plotConfigsTree.size(): " << plotConfigsTree.value().size() << std::endl;
     for (const auto& plotConfig : plotConfigsTree.value()) {
@@ -934,7 +1105,11 @@ void aqc_process(const char* rootFileList, const char* config)
       plotConfigs.push_back({ plotConfig.second.get<std::string>("detector"),
                         plotConfig.second.get<std::string>("task"),
                         plotConfig.second.get<std::string>("name"),
+                        plotConfig.second.get<std::string>("label", ""),
+                        plotConfig.second.get<std::string>("projection", ""),
                         plotConfig.second.get<std::string>("drawOptions", "H"),
+                        plotConfig.second.get<bool>("logx", 0),
+                        plotConfig.second.get<bool>("logy", 0),
                         plotConfig.second.get<double>("checkRangeMin", 0),
                         plotConfig.second.get<double>("checkRangeMax", 0),
                         plotConfig.second.get<double>("checkThreshold", 0.1),
@@ -947,7 +1122,7 @@ void aqc_process(const char* rootFileList, const char* config)
 
   // Plot configuration
   std::vector<PlotConfig> trendConfigs;
-  auto trendConfigsTree = jsontree.get_child_optional("trends");
+  auto trendConfigsTree = ptPlots.get_child_optional("trends");
   if (trendConfigsTree.has_value()) {
     std::cout << "trendConfigsTree.size(): " << trendConfigsTree.value().size() << std::endl;
     for (const auto& trendConfig : trendConfigsTree.value()) {
@@ -955,7 +1130,11 @@ void aqc_process(const char* rootFileList, const char* config)
       trendConfigs.push_back({ trendConfig.second.get<std::string>("detector"),
                         trendConfig.second.get<std::string>("task"),
                         trendConfig.second.get<std::string>("name"),
+                        trendConfig.second.get<std::string>("label"),
+                        trendConfig.second.get<std::string>("projection", ""),
                         trendConfig.second.get<std::string>("drawOptions", ""),
+                        trendConfig.second.get<bool>("logx", 0),
+                        trendConfig.second.get<bool>("logy", 0),
                         trendConfig.second.get<double>("checkRangeMin", 0),
                         trendConfig.second.get<double>("checkRangeMax", 0),
                         trendConfig.second.get<double>("checkThreshold", 0.1),
@@ -965,17 +1144,6 @@ void aqc_process(const char* rootFileList, const char* config)
     std::cout << "Key \"" << "trends" << "\" not found in configuration" << std::endl;
   }
 
-
-
-  std::ifstream infile(rootFileList);
-  std::string rootFilePath;
-  std::vector<std::string> rootFileNames;
-  std::vector<std::shared_ptr<TFile>> rootFiles;
-  while (infile >> rootFilePath)
-  {
-    rootFileNames.push_back(rootFilePath);
-    rootFiles.push_back(std::make_shared<TFile>(rootFilePath.c_str()));
-  }
 
   //std::array<std::string, 4> plotPathSplitted{ "mw", detectorName, taskName, plotName };
   //splitPlotPath(plotName, plotPathSplitted);
@@ -1004,13 +1172,13 @@ void aqc_process(const char* rootFileList, const char* config)
     populateRateIntervals(monitorObjects, monitorObjectsInRateIntervals);
     populateReferencePlots(monitorObjects);
 
-    for (auto& [runNumber, moMap] : monitorObjects) {
-      plotRun(plot, runNumber, monitorObjectsInRateIntervals);
-    }
+    //for (auto& [runNumber, moMap] : monitorObjects) {
+    //  plotRun(plot, runNumber, monitorObjectsInRateIntervals);
+    //}
 
     plotAllRunsWithRatios(plot, monitorObjectsInRateIntervals);
 
-    plotReferenceComparisonForAllRuns(plot, monitorObjectsInRateIntervals);
+    //plotReferenceComparisonForAllRuns(plot, monitorObjectsInRateIntervals);
   }
 
   for (const auto& plot : trendConfigs) {

@@ -4,13 +4,18 @@ export INFOLOGGER_MODE=stdout
 export SCRIPTDIR=$(readlink -f $(dirname $0))
 #echo "SCRIPTDIR: ${SCRIPTDIR}"
 
-CONFIG="$1"
+RUNS_CONFIG="$1"
+PLOTS_CONFIG="$2"
 
-ID=$(jq ".id" "$CONFIG" | tr -d "\"")
+YEAR=$(jq ".year" "${RUNS_CONFIG}" | tr -d "\"")
+PERIOD=$(jq ".period" "${RUNS_CONFIG}" | tr -d "\"")
+PASS=$(jq ".pass" "${RUNS_CONFIG}" | tr -d "\"")
 
-mkdir -p "outputs/${ID}"
+ID=$(jq ".id" "${PLOTS_CONFIG}" | tr -d "\"")
 
-echo "root -b -q \"aqc_process.C(\\\"inputs/${ID}/qclist.txt\\\", \\\"$CONFIG\\\")\""
-root -b -q "aqc_process.C(\"inputs/${ID}/qclist.txt\", \"$CONFIG\")" >& "outputs/${ID}/log.txt"
+mkdir -p "outputs/${ID}/${YEAR}/${PERIOD}/${PASS}"
+
+echo "root -b -q \"aqc_process.C(\\\"${RUNS_CONFIG}\\\", \\\"${PLOTS_CONFIG}\\\")\""
+root -b -q "aqc_process.C(\"${RUNS_CONFIG}\", \"${PLOTS_CONFIG}\")" #>& "outputs/${ID}/log.txt"
 
 cat "outputs/${ID}/log.txt" | grep "Bad time interval"

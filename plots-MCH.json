@@ -1,0 +1,48 @@
+{
+    "id": "test",
+    "beamType": "Pb-Pb",
+    "plots": [
+        {
+            "detector": "MCH",
+            "task": "Clusters",
+            "name": "ClustersPerChamber",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Clusters",
+            "name": "ClusterSizePerChamber",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "TrackEta",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "-3.9",
+            "checkRangeMax": "-2.51",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "WithCuts/TrackPhi",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "WithCuts/TrackPt",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "0.5",
+            "checkRangeMax": "3.0",
+            "drawOptions": "H",
+            "logx": "1",
+            "logy": "0"
+        },
+    ]
+}

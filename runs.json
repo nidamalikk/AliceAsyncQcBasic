@@ -1,0 +1,32 @@
+{
+    "year": "2024",
+    "period": "LHC24ar",
+    "pass": "apass1",
+    "enable_chunks": "0",
+    "runs": [
+        "560142",
+        "560162",
+        "560163",
+        "560164",
+        "560168",
+        "560184"
+    ],
+    "referenceRuns": [
+        {
+            "number": "560070",
+            "rateMax": "15"
+        },
+        {
+            "number": "560034",
+            "rateMax": "28"
+        },
+        {
+            "number": "560033",
+            "rateMax": "45"
+        },
+        {
+            "number": "560031",
+            "rateMax": "50"
+        }
+    ]
+}

@@ -1,0 +1,66 @@
+{
+    "id": "test",
+    "beamType": "Pb-Pb",
+    "plots": [
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackEta",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "-3.99",
+            "checkRangeMax": "-2.51",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackPhi",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackPt",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "0.5",
+            "checkRangeMax": "3.0",
+            "drawOptions": "H",
+            "logx": "1",
+            "logy": "0"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackEta",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "-3.29",
+            "checkRangeMax": "-2.51",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackPhi",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackPt",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "0.5",
+            "checkRangeMax": "3.0",
+            "drawOptions": "H",
+            "logx": "1",
+            "logy": "0"
+        }
+    ]
+}

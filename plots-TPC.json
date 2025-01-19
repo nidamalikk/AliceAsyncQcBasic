@@ -1,0 +1,27 @@
+{
+    "id": "test",
+    "plots": [
+        {
+            "detector": "TPC",
+            "task": "PID",
+            "name": "hdEdxTotMIP_TPC",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "TPC",
+            "task": "Tracks",
+            "name": "h2DNClustersEta",
+            "drawOptions": "H",
+            "projection": "x",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05"
+        },
+        {
+            "detector": "TPC",
+            "task": "Tracks",
+            "name": "h2DNClustersEta",
+            "drawOptions": "H",
+            "projection": "y"
+        }
+    ]
+}

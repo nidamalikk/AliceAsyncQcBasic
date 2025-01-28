@@ -5,12 +5,16 @@
 #include <fstream>
 #include <algorithm>
 #include <string>
+#include <set>
 
 //#include <DataFormatsCTP/CTPRateFetcher.h>
 #include "./CTPRateFetcher.h"
 
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
+//#include <boost/property_tree/ptree.hpp>
+//#include <boost/property_tree/json_parser.hpp>
+
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
 
 using namespace o2::quality_control::core;
 
@@ -18,6 +22,7 @@ std::string sessionID;
 std::string year;
 std::string period;
 std::string pass;
+std::string beamType;
 
 //std::string CTPScalerSourceName{ "T0VTX" };
 std::string CTPScalerSourceName{ "ZNC-hadronic" };
@@ -30,6 +35,8 @@ std::vector<std::pair<double, double>> rateIntervals;
 std::map<double, int> referenceRunsMap; //{ {15, 560070}, {29, 560034}, {40, 560033}, {50, 560031} };
 
 std::map<int, std::shared_ptr<TH1>> referencePlots;
+
+std::map<int, std::map<std::string, std::set<std::pair<long, long>>>> badTimeIntervals;
 
 using namespace o2::quality_control::core;
 
@@ -922,6 +929,8 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
             << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
             << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
             << std::endl;
+
+        badTimeIntervals[mo->getActivity().mId][plotConfig.plotName].insert(std::make_pair<long, long>(mo->getValidity().getMin(), mo->getValidity().getMax()));
       }
 
       if (mo->getActivity().mId == refRunNumber) {
@@ -964,6 +973,31 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   }
   canvas.canvas->Clear();
   canvas.canvas->SaveAs((outputFileName + ")").c_str());
+
+  std::cout << "\n\n==================\nDetailed report\n==================\n\n";
+  //std::map<int, std::map<std::string, std::vector<std::pair<long, long>>>> badTimeIntervals;
+  for (auto& [run, plotMap] : badTimeIntervals) {
+    if (plotMap.empty()) {
+      continue;
+    }
+    std::cout << "Run " << run << std::endl;
+    for (auto& [plotName, intervalVec] : plotMap) {
+      std::cout << "  plot \"" << plotName << "\"\n";
+      for (auto& [min, max] : intervalVec) {
+        TDatime daTime;
+        daTime.Set(min/1000);
+        int hourMin = daTime.GetHour();
+        int minuteMin = daTime.GetMinute();
+        int secondMin = daTime.GetSecond();
+        daTime.Set(max/1000);
+        int hourMax = daTime.GetHour();
+        int minuteMax = daTime.GetMinute();
+        int secondMax = daTime.GetSecond();
+
+        std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+      }
+    }
+  }
 }
 
 void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<double, std::shared_ptr<MonitorObject>>>& monitorObjects)
@@ -1024,6 +1058,102 @@ void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<doub
   c.SaveAs(outputFileName.c_str());
 }
 
+void printReport()
+{
+  std::cout << "\n\n==================\nSummary report\n==================\n\n";
+  for (auto& [run, plotMap] : badTimeIntervals) {
+    if (plotMap.empty()) {
+      continue;
+    }
+   std::cout << "Run " << run << std::endl;
+    // aggregate bad intervals for each plot separately
+    std::map<std::string, std::vector<std::pair<long, long>>> aggregatedIntervalsPerPlot;
+    std::vector<std::pair<long, long>> intervalsToBeAggregated;
+    for (auto& [plotName, intervalVec] : plotMap) {
+      for (auto& [min, max] : intervalVec) {
+        if (aggregatedIntervalsPerPlot.count(plotName) <= 0) {
+          aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+        } else {
+          long lastMax = aggregatedIntervalsPerPlot[plotName].back().second;
+          if (min <= lastMax) {
+            // if the current interval overlaps or is adjacent with the currently aggregated one, we extend the aggregated interval if needed
+            if (max > lastMax) {
+              aggregatedIntervalsPerPlot[plotName].back().second = max;
+            }
+          } else {
+            // otherwise we initialize a new aggregated interval
+            aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+          }
+        }
+      }
+
+      for (auto& [min, max] : aggregatedIntervalsPerPlot[plotName]) {
+        intervalsToBeAggregated.push_back(std::make_pair(min, max));
+
+        if (false) {
+          TDatime daTime;
+          daTime.Set(min/1000);
+          int hourMin = daTime.GetHour();
+          int minuteMin = daTime.GetMinute();
+          int secondMin = daTime.GetSecond();
+          daTime.Set(max/1000);
+          int hourMax = daTime.GetHour();
+          int minuteMax = daTime.GetMinute();
+          int secondMax = daTime.GetSecond();
+
+          std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d] for plot \"%s\"\n",
+              min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax, plotName.c_str()).Data();
+        }
+      }
+    }
+
+    // sort all intervals in ascending order
+    std::sort(intervalsToBeAggregated.begin(), intervalsToBeAggregated.end());
+    // aggregate all intervals together
+    std::set<std::pair<long, long>> aggregatedIntervals;
+    std::pair<long, long> currentInterval{ -1, -1 };
+    for (auto& [min, max] : intervalsToBeAggregated) {
+      if (currentInterval.first < 0) {
+        currentInterval.first = min;
+        currentInterval.second = max;
+        continue;
+      }
+
+      if (min <= currentInterval.second && max >= currentInterval.first) {
+        // the intervals are overlapping, we update the limits if needed
+        if (min < currentInterval.first) currentInterval.first = min;
+        if (max > currentInterval.second) currentInterval.second = max;
+      } else {
+        // the new interval does not overlap with the current one
+        // we insert the current in the set of intervals and we re-initialize it with the new interval
+        aggregatedIntervals.insert(currentInterval);
+        currentInterval.first = min;
+        currentInterval.second = max;
+      }
+    }
+
+    if (currentInterval.first >= 0) {
+      // as the final step, add the current interval to the set as well
+      aggregatedIntervals.insert(currentInterval);
+    }
+
+    for (auto& [min, max] : aggregatedIntervals) {
+      TDatime daTime;
+      daTime.Set(min/1000);
+      int hourMin = daTime.GetHour();
+      int minuteMin = daTime.GetMinute();
+      int secondMin = daTime.GetSecond();
+      daTime.Set(max/1000);
+      int hourMax = daTime.GetHour();
+      int minuteMax = daTime.GetMinute();
+      int secondMax = daTime.GetSecond();
+
+      std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n",
+          min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+    }
+  }
+}
+
 void aqc_process(const char* runsConfig, const char* plotsConfig)
 {
   gStyle->SetOptStat(0);
@@ -1031,31 +1161,60 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   gStyle->SetPalette(57, 0);
   gStyle->SetNumberContours(40);
 
-  boost::property_tree::ptree ptRuns;
-  boost::property_tree::read_json(runsConfig, ptRuns);
+  std::ifstream fRunsConfig(runsConfig);
+  auto jRunsConfig = json::parse(fRunsConfig);
 
-  boost::property_tree::ptree ptPlots;
-  boost::property_tree::read_json(plotsConfig, ptPlots);
+  std::ifstream fPlotsConfig(plotsConfig);
+  auto jPlotsConfig = json::parse(fPlotsConfig);
 
-  sessionID = ptPlots.get<std::string>("id");
+  //boost::property_tree::ptree ptRuns;
+  //boost::property_tree::read_json(runsConfig, ptRuns);
+
+  //boost::property_tree::ptree ptPlots;
+  //boost::property_tree::read_json(plotsConfig, ptPlots);
+
+  //sessionID = ptPlots.get<std::string>("id");
+  sessionID = jPlotsConfig.at("id").get<std::string>();
   std::cout << "ID: " << sessionID << std::endl;
 
-  year = ptRuns.get<std::string>("year");
-  period = ptRuns.get<std::string>("period");
-  pass = ptRuns.get<std::string>("pass");
+  //year = ptRuns.get<std::string>("year");
+  //period = ptRuns.get<std::string>("period");
+  //pass = ptRuns.get<std::string>("pass");
+  //beamType = ptRuns.get<std::string>("beamType");
+  year = jRunsConfig.at("year").get<std::string>();
+  period = jRunsConfig.at("period").get<std::string>();
+  pass = jRunsConfig.at("pass").get<std::string>();
+  beamType = jRunsConfig.at("beamType").get<std::string>();
 
-  std::vector<int> runNumbers;
   // input runs
-  auto inputRuns = ptRuns.get_child_optional("runs");
+  std::vector<std::string> inputRuns = jRunsConfig.at("runs");
+  std::vector<int> runNumbers;
+  for (const auto& inputRun : inputRuns) {
+    runNumbers.push_back(std::stoi(inputRun));
+  }
+  /*auto inputRuns = ptRuns.get_child_optional("runs");
   if (inputRuns.has_value()) {
     std::cout << "inputRuns.size(): " << inputRuns.value().size() << std::endl;
     for (const auto& inputRun : inputRuns.value()) {
       runNumbers.push_back(inputRun.second.get_value<int>());
     }
-  }
+  }*/
 
   // reference runs
-  auto referenceRuns = ptRuns.get_child_optional("referenceRuns");
+  if (jRunsConfig.count("referenceRuns") > 0) {
+    auto referenceRuns = jRunsConfig.at("referenceRuns");
+    for (const auto& referenceRun : referenceRuns) {
+      auto run = std::stoi(referenceRun.at("number").get<std::string>());
+      double rateMax = std::stod(referenceRun.at("rateMax").get<std::string>());
+      std::cout << std::format("reference run {} valid up to {} kHz\n", run, rateMax);
+      referenceRunsMap[rateMax] = run;
+      runNumbers.push_back(run);
+    }
+  } else {
+    std::cout << "Key \"" << "referenceRuns" << "\" not found in configuration" << std::endl;
+  }
+
+  /*auto referenceRuns = ptRuns.get_child_optional("referenceRuns");
   if (referenceRuns.has_value()) {
     std::cout << "referenceRuns.size(): " << referenceRuns.value().size() << std::endl;
     for (const auto& referenceRun : referenceRuns.value()) {
@@ -1066,7 +1225,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     }
   } else {
     std::cout << "Key \"" << "referenceRuns" << "\" not found in configuration" << std::endl;
-  }
+  }*/
 
   // loading of ROOT files
   std::vector<std::string> rootFileNames;
@@ -1094,10 +1253,35 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
 
   //return;
 
-
   // Plot configuration
-  std::vector<PlotConfig> plotConfigs;
-  auto plotConfigsTree = ptPlots.get_child_optional("plots");
+  std::vector<PlotConfig> plotConfigsVector;
+
+  if (jPlotsConfig.count("plots") > 0) {
+    auto plotConfigs = jPlotsConfig.at("plots");
+    std::cout << "plotConfigs.size(): " << plotConfigs.size() << std::endl;
+    for (const auto& config : plotConfigs) {
+      auto detectorName = config.at("detector").get<std::string>();
+      auto taskName = config.at("task").get<std::string>();
+      auto plotName = config.at("name").get<std::string>();
+      std::cout << "New plot: \"" << detectorName << "/" << taskName << "/" << plotName << "\"" << std::endl;
+      plotConfigsVector.push_back({ detectorName, taskName, plotName,
+                        config.value("label", ""),
+                        config.value("projection", ""),
+                        config.value("drawOptions", "H"),
+                        config.value("logx", false),
+                        config.value("logy", false),
+                        config.value("checkRangeMin", double(0.0)),
+                        config.value("checkRangeMax", double(0.0)),
+                        config.value("checkThreshold", double(0.1)),
+                        config.value("maxBadBinsFrac", double(0.1)),
+                        config.value("normalize", true)
+      });
+    }
+  } else {
+    std::cout << "Key \"" << "plots" << "\" not found in configuration" << std::endl;
+  }
+
+  /*auto plotConfigsTree = ptPlots.get_child_optional("plots");
   if (plotConfigsTree.has_value()) {
     std::cout << "plotConfigsTree.size(): " << plotConfigsTree.value().size() << std::endl;
     for (const auto& plotConfig : plotConfigsTree.value()) {
@@ -1118,16 +1302,42 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     }
   } else {
     std::cout << "Key \"" << "plots" << "\" not found in configuration" << std::endl;
-  }
+  }*/
 
   // Plot configuration
-  std::vector<PlotConfig> trendConfigs;
-  auto trendConfigsTree = ptPlots.get_child_optional("trends");
+  std::vector<PlotConfig> trendConfigsVector;
+
+  if (jPlotsConfig.count("trends") > 0) {
+    auto trendConfigs = jPlotsConfig.at("trends");
+    std::cout << "trendConfigs.size(): " << trendConfigs.size() << std::endl;
+    for (const auto& config : trendConfigs) {
+      auto detectorName = config.at("detector").get<std::string>();
+      auto taskName = config.at("task").get<std::string>();
+      auto plotName = config.at("name").get<std::string>();
+      std::cout << "New plot: \"" << detectorName << "/" << taskName << "/" << plotName << "\"" << std::endl;
+      trendConfigsVector.push_back({ detectorName, taskName, plotName,
+                        config.value("label", ""),
+                        config.value("projection", ""),
+                        config.value("drawOptions", ""),
+                        config.value("logx", false),
+                        config.value("logy", false),
+                        config.value("checkRangeMin", double(0.0)),
+                        config.value("checkRangeMax", double(0.0)),
+                        config.value("checkThreshold", double(0.1)),
+                        config.value("maxBadBinsFrac", double(0.1)),
+                        config.value("normalize", true)
+      });
+    }
+  } else {
+    std::cout << "Key \"" << "trends" << "\" not found in configuration" << std::endl;
+  }
+
+  /*auto trendConfigsTree = ptPlots.get_child_optional("trends");
   if (trendConfigsTree.has_value()) {
     std::cout << "trendConfigsTree.size(): " << trendConfigsTree.value().size() << std::endl;
     for (const auto& trendConfig : trendConfigsTree.value()) {
       std::cout << "New trend: \"" << trendConfig.second.get<std::string>("detector") << "/" << trendConfig.second.get<std::string>("task") << "/" << trendConfig.second.get<std::string>("name") << "\"" << std::endl;
-      trendConfigs.push_back({ trendConfig.second.get<std::string>("detector"),
+      trendConfigsVector.push_back({ trendConfig.second.get<std::string>("detector"),
                         trendConfig.second.get<std::string>("task"),
                         trendConfig.second.get<std::string>("name"),
                         trendConfig.second.get<std::string>("label"),
@@ -1142,7 +1352,9 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     }
   } else {
     std::cout << "Key \"" << "trends" << "\" not found in configuration" << std::endl;
-  }
+  }*/
+
+  //return;
 
 
   //std::array<std::string, 4> plotPathSplitted{ "mw", detectorName, taskName, plotName };
@@ -1151,9 +1363,20 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   auto& ccdbManager = o2::ccdb::BasicCCDBManager::instance();
   ccdbManager.setURL("https://alice-ccdb.cern.ch");
 
-  double rateMax = 50;
-  double rateMin = 5;
-  double rateDelta = 0.1;
+  double rateMax = 0;
+  double rateMin = 0;
+  double rateDelta = 0;
+  if (beamType == "Pb-Pb") {
+    rateMax = 50;
+    rateMin = 5;
+    rateDelta = 0.1;
+    CTPScalerSourceName = "ZNC-hadronic";
+  } else if (beamType == "pp") {
+    rateMax = 1000;
+    rateMin = 100;
+    rateDelta = 0.1;
+    CTPScalerSourceName = "T0VTX";
+  }
   double rate = rateMax;
   while (rate > rateMin) {
     double rate2 = (1.0 - rateDelta) * rate;
@@ -1161,7 +1384,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     rate = rate2;
   }
 
-  for (const auto& plot : plotConfigs) {
+  for (const auto& plot : plotConfigsVector) {
     std::map<int, std::multimap<double, std::shared_ptr<Plot>>> plots;
     std::map<int, std::multimap<double, std::shared_ptr<MonitorObject>>> monitorObjects;
     std::map<int, std::vector<std::shared_ptr<MonitorObject>>> monitorObjectsInRateIntervals;
@@ -1181,7 +1404,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     //plotReferenceComparisonForAllRuns(plot, monitorObjectsInRateIntervals);
   }
 
-  for (const auto& plot : trendConfigs) {
+  for (const auto& plot : trendConfigsVector) {
     std::map<int, std::multimap<double, std::shared_ptr<MonitorObject>>> monitorObjects;
     std::map<int, std::vector<std::shared_ptr<MonitorObject>>> monitorObjectsInRateIntervals;
 
@@ -1191,4 +1414,6 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
 
     trendAllRuns(plot, monitorObjects);
   }
+
+  printReport();
 }

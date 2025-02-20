@@ -45,7 +45,7 @@ if [ x"$TYPE" = "xsim" ]; then
         ROOTFILE=$(alien_ls "${BASEDIR}/${PASS}/${RUN}/QC/vertexQC.root" 2> /dev/null)
         #echo "ROOTFILE: $ROOTFILE"
         if [ -n "${ROOTFILE}" ]; then
-            echo "Run $RUN found"
+            #echo "Run $RUN found"
             if [ ${FIRST} -eq 0 ]; then
                 RUNLIST="${RUNLIST}, "
                 RUNLISTJSON="${RUNLISTJSON}, "
@@ -71,7 +71,7 @@ else
         
         #echo $LINE
         RUN=$(echo "$LINE" | tr "/" "\n" | head -n 6 | tail -n 1)
-        echo "Run $RUN found"
+        #echo "Run $RUN found"
         if [ ${FIRST} -eq 0 ]; then
             RUNLIST="${RUNLIST}, "
             RUNLISTJSON="${RUNLISTJSON}, "

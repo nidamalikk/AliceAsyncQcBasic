@@ -40,7 +40,7 @@ FULLRUNLIST=$(echo "$REFRUNLIST $RUNLIST" | tr " " "\n" | sort | uniq)
 for RUN in $FULLRUNLIST
 do
 
-    #echo "RUN: $RUN"
+    echo "Fetching run ${RUN}..."
 
     ROOTFILES=""
           

@@ -131,7 +131,86 @@ An example of plots configuration is given below.
 }
 ```
 
-### Fetching of QC.root files
+## Getting the list of completed runs for a given production
+
+An utility script allows to print the list of runs that are identified as completed for the production specified in the JSON configuration file, like in the example below:
+
+```
+./aqc-get-completed-runs.sh runs.json
+--------------------
+Getting completed runs from /alice/data/2024/LHC24ar/*/apass1
+--------------------
+
+559544, 559545, 559561, 559574, 559575, 559595, 559596, 559613, 559614, 559615, 559616, 559617, 559631, 559632, 559679, 559680, 559681, 559713, 559731, 559749, 559762, 559781, 559782, 559783, 559784, 559802, 559803, 559804, 559827, 559828, 559830, 559843, 559856, 559901, 559902, 559903, 559917, 559919, 559920, 559933, 559966, 559968, 559969, 559970, 559987, 560012, 560031, 560033, 560034, 560049, 560066, 560067, 560070, 560089, 560090, 560105, 560106, 560123, 560127, 560141, 560142, 560162, 560163, 560164, 560168, 560169, 560184
+```
+
+### Auto-filling the configuration with the list of completed runs
+
+If the `-u` option is passed to the script as the first parameter, the `'runs` key in the configuration file is automatically updated with the list of completed runs, like this:
+
+    ./aqc-get-completed-runs.sh -u runs.json
+
+## Creating a new runs configuration for a given production
+
+The following steps should be followed in order to create a new JSON configuration for a given production. In the examples below, we will be creating from scratch a configuration for the `apass1` production pass of the `LHC24as` period.
+
+
+1\. copy the runs configuration template:
+
+   `cp runs-data-template.json runs-LHC24as.json`
+
+2\. fill the `"year"`, `"period"`, `"pass`" and `"beamType"` fields with the appropriate values. The beam type can be set to either `"pp"` or `"Pb-Pb"`.
+For this example, the configuration should look like this:
+
+    ```
+    {
+      "type": "data",
+      "year": "2024",
+      "period": "LHC24as",
+      "pass": "apass1",
+      "beamType": "Pb-Pb",
+      "enable_chunks": "0",
+      "productionRuns": [
+      ],
+      "productionStart": "1970-01-01 00:00:00",
+      "runs": [
+      ],
+      "referenceRuns": [
+      ]
+    }
+    ```
+You can ignore the `"productionRuns"` and `"productionStart"` fields for now.
+
+3\. Fill the configuration with the completed runs:
+
+    ```
+    ./aqc-get-completed-runs.sh -u runs-LHC24as.json
+    ```
+
+The configuration at this point should look like this:
+
+```
+{
+  "type": "data",
+  "year": "2024",
+  "period": "LHC24as",
+  "pass": "apass1",
+  "beamType": "Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    
+  ],
+  "productionStart": "1970-01-01 00:00:00",
+  "runs": [
+    560223, 560229, 560243, 560244, 560279, 560310, 560313, 560314, 560330, 560331, 560334, 560352, 560355, 560371, 560397, 560399, 560401, 560402
+  ],
+  "referenceRuns": []
+}
+```
+
+It is now possible to move to the next step, and fetch the QC ROOT files locally.
+
+## Fetching of QC_fullrun.root files
 
 The input `QC_fullrun.root` files need to be downloaded locally. An helper script is provided to automate this process, taking the runs configuration file as parameter:
 ```
@@ -141,7 +220,7 @@ The input `QC_fullrun.root` files need to be downloaded locally. An helper scrip
 The command above will download all the root files under `inputs/YEAR/PERIOD/PASS/RUN`. Files that were already downloaded will be skipped.
 The script will fetch all the `QC_fullrun.root` files from the async jobs of the runs listed in the configuration, as well as those of the reference runs.
 
-### Processing the QC.root files
+## Processing the QC_fullrun.root files
 
 Once the root files are downloaded locally, they can be processed via the following helper script, taking the runs and plots configuration files as parameters:
 
@@ -153,7 +232,7 @@ The PDF files with the output plots are stored under `outputs/ID/YEAR/PERIOD/PAS
 At the end the script also prints the list of plots that did not fulfill the compatibility criteria with the referece plots, for example:
 
 ```
-[O2PDPSuite/latest-o2-epn] ~/Workflows/MuonAsyncQC $> ./aqc-process.sh config.json 
+[O2PDPSuite/latest-o2-epn] ~/Workflows/MuonAsyncQC $> ./aqc-process.sh runs.json plots.json
 root -b -q "aqc_process.C(\"inputs/test/qclist.txt\", \"config.json\")"
 Bad time interval for plot "mMFTTrackEta": 560123 [07:14:26 - 07:19:26]
 Bad time interval for plot "mMFTTrackEta": 560123 [07:09:26 - 07:14:26]

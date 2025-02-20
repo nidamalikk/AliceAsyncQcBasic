@@ -1,0 +1,39 @@
+{
+    "id": "test",
+    "plots": [
+        {
+            "detector": "MCH",
+            "task": "Clusters",
+            "name": "ClustersPerChamber",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackEta",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "checkRangeMin": "-3.99",
+            "checkRangeMax": "-2.51",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackPhi",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracks",
+            "name": "MCH-MID/WithCuts/TrackPt",
+            "checkThreshold": "0.05",
+            "maxBadBinsFrac": "0.05",
+            "drawOptions": "H",
+            "logx": "1",
+            "logy": "0"
+        }
+    ]
+}

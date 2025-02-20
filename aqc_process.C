@@ -1187,10 +1187,10 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   beamType = jRunsConfig.at("beamType").get<std::string>();
 
   // input runs
-  std::vector<std::string> inputRuns = jRunsConfig.at("runs");
+  std::vector<int> inputRuns = jRunsConfig.at("runs");
   std::vector<int> runNumbers;
   for (const auto& inputRun : inputRuns) {
-    runNumbers.push_back(std::stoi(inputRun));
+    runNumbers.push_back(inputRun);
   }
   /*auto inputRuns = ptRuns.get_child_optional("runs");
   if (inputRuns.has_value()) {
@@ -1204,8 +1204,8 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   if (jRunsConfig.count("referenceRuns") > 0) {
     auto referenceRuns = jRunsConfig.at("referenceRuns");
     for (const auto& referenceRun : referenceRuns) {
-      auto run = std::stoi(referenceRun.at("number").get<std::string>());
-      double rateMax = std::stod(referenceRun.at("rateMax").get<std::string>());
+      auto run = referenceRun.at("number").get<int>();
+      double rateMax = referenceRun.at("rateMax").get<double>();
       std::cout << std::format("reference run {} valid up to {} kHz\n", run, rateMax);
       referenceRunsMap[rateMax] = run;
       runNumbers.push_back(run);

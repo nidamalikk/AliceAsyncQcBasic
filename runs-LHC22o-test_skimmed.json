@@ -1,0 +1,16 @@
+{
+  "type": "data",
+  "year": "2022",
+  "period": "LHC22o-test",
+  "pass": "apass7_skimmed",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "productionRuns": [
+    527690, 527694, 527731, 527734, 527736
+  ],
+  "productionStart": "2024-05-15 00:00:00",
+  "runs": [
+  ],
+  "referenceRuns": [
+  ]
+}

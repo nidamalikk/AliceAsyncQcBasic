@@ -13,6 +13,8 @@
 //#include <boost/property_tree/ptree.hpp>
 //#include <boost/property_tree/json_parser.hpp>
 
+#include <chrono>
+
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
@@ -193,7 +195,7 @@ std::vector<std::shared_ptr<MonitorObject>> GetMOMW(TFile* f, const PlotConfig& 
     return result;
   }
   auto listOfKeys = dir->GetListOfKeys();
-  for (int i = 0 ; i < listOfKeys->GetEntries(); ++i) {
+  for (int i = listOfKeys->GetEntries() - 1 ; i >= 0; --i) {
     //std::cout<< "i: " << i << "  " << listOfKeys->At(i)->GetName() << std::endl;
     auto* moc = dynamic_cast<o2::quality_control::core::MonitorObjectCollection*>(dir->Get(listOfKeys->At(i)->GetName()));
     if (!moc) continue;
@@ -249,6 +251,47 @@ bool splitPlotPath(std::string plotPath, std::array<std::string, 4>& plotPathSpl
   return true;
 }
 
+using DateTime = std::pair<std::chrono::year_month_day, std::chrono::hh_mm_ss<std::chrono::milliseconds>>;
+
+DateTime getLocalTime(uint64_t timeStamp, const char* timeZone)
+{
+  DateTime result;
+  auto localTime = std::chrono::zoned_time{timeZone, std::chrono::system_clock::time_point{std::chrono::milliseconds{timeStamp}}}.get_local_time();
+  result.first = std::chrono::year_month_day{floor<std::chrono::days>(localTime)};
+  result.second = std::chrono::hh_mm_ss{floor<std::chrono::milliseconds>(localTime - floor<std::chrono::days>(localTime))};
+  return result;
+}
+
+int getYear(DateTime dateTime)
+{
+  return int(dateTime.first.year());
+}
+
+uint32_t getMonth(DateTime dateTime)
+{
+  return unsigned(dateTime.first.month());
+}
+
+uint32_t getDay(DateTime dateTime)
+{
+  return unsigned(dateTime.first.day());
+}
+
+int getHour(DateTime dateTime)
+{
+  return dateTime.second.hours().count();
+}
+
+int getMinute(DateTime dateTime)
+{
+  return dateTime.second.minutes().count();
+}
+
+int getSecond(DateTime dateTime)
+{
+  return dateTime.second.seconds().count();
+}
+
 int getReferenceRunForRate(double rate)
 {
   int result = 0;
@@ -270,7 +313,6 @@ void loadPlotsFromRootFiles(std::vector<std::shared_ptr<TFile>>& rootFiles, cons
 
   for (auto rootFile : rootFiles) {
     std::cout << "Loading plot \"" << plotConfig.plotName << "\" from file " << rootFile->GetPath() << std::endl;
-    //TFile* f = new TFile(rootFile.c_str());
     auto moVector = GetMOMW(rootFile.get(), plotConfig);
 
     for (auto& mo : moVector) {
@@ -309,66 +351,6 @@ void loadPlotsFromRootFiles(std::vector<std::shared_ptr<TFile>>& rootFiles, cons
 
       monitorObjects[runNumber].insert({rate, mo});
     }
-  }
-}
-
-void loadPlotsFromRootFiles(std::vector<std::string>& rootFileNames, const PlotConfig& plotConfig,
-    std::map<int, std::multimap<double, std::shared_ptr<Plot>>>& plots)
-{
-
-  auto& ccdbManager = o2::ccdb::BasicCCDBManager::instance();
-
-  for (auto rootFileName : rootFileNames) {
-    std::cout << "Loading plot \"" << plotConfig.plotName << "\" from file " << rootFileName << std::endl;
-    //std::shared_ptr<TFile> f = std::make_shared<TFile>(rootFileName.c_str());
-    TFile* f = new TFile(rootFileName.c_str());
-    auto moVector = GetMOMW(f, plotConfig);
-
-    for (auto& mo : moVector) {
-      int runNumber = mo->getActivity().mId;
-      auto timestamp = mo->getValidity().getMax(); //(mo->getValidity().getMax() + mo->getValidity().getMin()) / 2;
-
-      TH1* hist = dynamic_cast<TH1*>(mo->getObject());
-      if (!hist) continue;
-
-      std::cout << "Loaded MO from file " << rootFileName
-          << " and validity " << mo->getValidity().getMin()
-          << " -> " << mo->getValidity().getMax() << std::endl;
-
-      // check if a MO with the same validity was already loaded, in which case we add the
-      // current one instead of adding a new entry in the map
-      bool histAdded = false;
-      if (false && plots.count(runNumber) > 0) {
-        for (auto& [rate, plotFromMap] : plots[runNumber]) {
-          if ( plotFromMap->validity == mo->getValidity()) {
-            //plotFromMap->histogram->Add(hist);
-            histAdded = true;
-            std::cout << "MO added to existing one" << std::endl;
-            break;
-          }
-        }
-      }
-
-      // if the histogram was added to an existing one, we stop here
-      if (histAdded) continue;
-
-      double rate = getRateForMO(mo);
-      std::cout << "Rate for run " << runNumber << " and timestamp " << timestamp << " and source \"" << CTPScalerSourceName << "\" is " << rate << " kHz" << std::endl;
-
-      TH1* histClone = (TH1*)hist->Clone(TString::Format("%s_%d_%lu", hist->GetName(), mo->getActivity().mId, mo->getValidity().getMax()));
-      histClone->SetDirectory(nullptr);
-      std::shared_ptr<Plot> plot = std::make_shared<Plot>(histClone, mo->getActivity(), mo->getValidity());
-
-      //std::shared_ptr<TH1> plotHistogram;
-      //Plot plot{ std::shared_ptr<TH1>(), mo->getActivity(), mo->getValidity() };
-      //plot.histogram.reset((TH1*)hist->Clone(TString::Format("%s_%d_%lu", hist->GetName(), mo->getActivity().mId, mo->getValidity().getMax())));
-
-      plots[runNumber].insert({rate, plot});
-    }
-
-    std::cout << "Before deleting TFile" << std::endl;
-    delete f;
-    std::cout << "After deleting TFile" << std::endl;
   }
 }
 
@@ -465,13 +447,14 @@ void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vec
       else hist->Draw("H same");
       nPlots += 1;
 
-      TDatime daTime;
-      daTime.Set(mo->getValidity().getMin()/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      daTime.Set(mo->getValidity().getMax()/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
+      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto secondMin = getSecond(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+      auto secondMax = getSecond(validityMax);
 
       legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
@@ -526,13 +509,12 @@ void plotAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::sh
       else hist->Draw((plotConfig.drawOptions + " same").c_str());
       first = false;
 
-      TDatime daTime;
-      daTime.Set(mo->getValidity().getMin()/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      daTime.Set(mo->getValidity().getMax()/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
+      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
 
       legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
@@ -621,13 +603,12 @@ void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<in
       }
       double fracBad = (nBinsChecked > 0) ? (nBinsBad / nBinsChecked) : 0;
 
-      TDatime daTime;
-      daTime.Set(mo->getValidity().getMin()/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      daTime.Set(mo->getValidity().getMax()/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
+      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
 
       if (fracBad > chekMaxBadBinsFrac) {
         std::cout << "Bad run: " << TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax).Data() << std::endl;
@@ -657,9 +638,11 @@ double getNornalizationFactor(TH1* hist, double xmin, double xmax)
   if (xmin != xmax) {
     int binMin = hist->GetXaxis()->FindBin(xmin);
     int binMax = hist->GetXaxis()->FindBin(xmax);
-    return (1.0 / hist->Integral(binMin, binMax));
+    double integral = hist->Integral(binMin, binMax);
+    return ((integral == 0) ? 1.0 : 1.0 / integral);
   } else {
-    return (1.0 / hist->Integral());
+    double integral = hist->Integral();
+    return ((integral == 0) ? 1.0 : 1.0 / integral);
   }
 }
 
@@ -680,11 +663,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
   int cW = 1800;
   int cH = 1200;
-  //TCanvas c("c","c",cW,cH);
-  //c.SetRightMargin(0.3);
-
   float labelSize = 0.025;
-
   double topBottomRatio = 1;
   double topSize = topBottomRatio / (topBottomRatio + 1.0);
   double bottomSize = 1.0 / (topBottomRatio + 1.0);
@@ -730,6 +709,8 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     for (auto& mo : moVec) {
       TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
       if (!histTemp) continue;
+      // skip empty histograms for the averaging
+      if (histTemp->GetEntries() == 0) continue;
 
       if (projection == "x") {
         TH2* h2 = dynamic_cast<TH2*>(histTemp);
@@ -751,28 +732,16 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         averageHist->Add(histTemp, getNornalizationFactor(histTemp, checkRangeMin, checkRangeMax));
       }
     }
-    // normalize the average histogram
-    //if (averageHist) {
-    //  averageHist->Scale(1.0 / moVec.size());
-    //}
 
 
     // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;
     if (referencePlots.count(index) > 0) {
       referenceHist = referencePlots[index];
-      //normalizeHistogram(referenceHist.get(), checkRangeMin, checkRangeMax);
-      /*if (checkRangeMin != checkRangeMax) {
-        int binMin = referenceHist->GetXaxis()->FindBin(checkRangeMin);
-        int binMax = referenceHist->GetXaxis()->FindBin(checkRangeMax);
-        referenceHist->Scale(1.0 / referenceHist->Integral(binMin, binMax));
-      } else {
-        referenceHist->Scale(1.0 / referenceHist->Integral());
-      }*/
     }
 
     TH1* denominatorHist = referenceHist ? referenceHist.get() : averageHist;
-    denominatorHist = averageHist;
+    normalizeHistogram(denominatorHist, checkRangeMin, checkRangeMax);
 
     auto legend = new TLegend(0.05,0.1,0.95,0.9);
 
@@ -780,7 +749,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     bool first = true;
     for (auto& mo : moVec) {
       TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
-      //std::cout << "hist: " << hist << std::endl;
+      //std::cout << "histTemp: " << histTemp << "  entries: " << histTemp->GetEntries() << std::endl;
       if (!histTemp) continue;
 
       if (projection == "x") {
@@ -811,15 +780,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       }
 
       TH1* hist = (TH1*)histTemp->Clone("_clone");
-
-      if (checkRangeMin != checkRangeMax) {
-        int binMin = hist->GetXaxis()->FindBin(checkRangeMin);
-        int binMax = hist->GetXaxis()->FindBin(checkRangeMax);
-        hist->Scale(1.0 / hist->Integral(binMin, binMax));
-      } else {
-        hist->Scale(1.0 / hist->Integral());
-      }
-      hist->SetMinimum(1.0e-6);
+      normalizeHistogram(hist, checkRangeMin, checkRangeMax);
 
       hist->GetXaxis()->SetLabelSize(0);
       hist->GetXaxis()->SetTitleSize(0);
@@ -831,11 +792,16 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
       hist->SetLineColor(lineColor);
 
+      // draw a transparent copy of the reference histogram to set the axes
       if (first) {
-        hist->SetTitle(TString::Format("%s [%0.1f kHz, %0.1f kHz]", hist->GetTitle(), rateIntervals[index].first, rateIntervals[index].second));
-        hist->Draw(plotConfig.drawOptions.c_str());
+        denominatorHist->SetTitle(TString::Format("%s [%0.1f kHz, %0.1f kHz]", hist->GetTitle(), rateIntervals[index].first, rateIntervals[index].second));
+        denominatorHist->SetLineColorAlpha(kBlack, 0.0);
+        denominatorHist->SetMarkerColorAlpha(kBlack, 0.0);
+        denominatorHist->SetMinimum(1.0e-6);
+        denominatorHist->Draw("H");
       }
-      else hist->Draw((plotConfig.drawOptions + " same").c_str());
+
+      hist->Draw((plotConfig.drawOptions + " same").c_str());
 
       double fracBad = 0;
       if (denominatorHist) {
@@ -914,15 +880,14 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
       first = false;
 
-      TDatime daTime;
-      daTime.Set(mo->getValidity().getMin()/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      int secondMin = daTime.GetSecond();
-      daTime.Set(mo->getValidity().getMax()/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
-      int secondMax = daTime.GetSecond();
+      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto secondMin = getSecond(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+      auto secondMax = getSecond(validityMax);
 
       if (fracBad > chekMaxBadBinsFrac) {
         std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
@@ -941,8 +906,6 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
         lentry->SetTextColor(kRed);
       }
-
-      //legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
 
     if (denominatorHist) {
@@ -974,25 +937,23 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   canvas.canvas->Clear();
   canvas.canvas->SaveAs((outputFileName + ")").c_str());
 
-  std::cout << "\n\n==================\nDetailed report\n==================\n\n";
-  //std::map<int, std::map<std::string, std::vector<std::pair<long, long>>>> badTimeIntervals;
+  std::cout << "\n\n==================\nDetailed report\n==================\n";
   for (auto& [run, plotMap] : badTimeIntervals) {
     if (plotMap.empty()) {
       continue;
     }
-    std::cout << "Run " << run << std::endl;
+    std::cout << "\nRun " << run << std::endl;
     for (auto& [plotName, intervalVec] : plotMap) {
-      std::cout << "  plot \"" << plotName << "\"\n";
+      std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
       for (auto& [min, max] : intervalVec) {
-        TDatime daTime;
-        daTime.Set(min/1000);
-        int hourMin = daTime.GetHour();
-        int minuteMin = daTime.GetMinute();
-        int secondMin = daTime.GetSecond();
-        daTime.Set(max/1000);
-        int hourMax = daTime.GetHour();
-        int minuteMax = daTime.GetMinute();
-        int secondMax = daTime.GetSecond();
+        auto validityMin = getLocalTime(min, "Europe/Paris");
+        auto hourMin = getHour(validityMin);
+        auto minuteMin = getMinute(validityMin);
+        auto secondMin = getSecond(validityMin);
+        auto validityMax = getLocalTime(max, "Europe/Paris");
+        auto hourMax = getHour(validityMax);
+        auto minuteMax = getMinute(validityMax);
+        auto secondMax = getSecond(validityMax);
 
         std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
       }
@@ -1013,7 +974,6 @@ void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<doub
 
   auto legend = new TLegend(0.82,0.1,0.95,0.9);
 
-  bool firstGraph = true;
   int lineColor = 51;
   for (auto& [run, moMap] : monitorObjects) {
     if (moMap.empty()) continue;
@@ -1037,13 +997,6 @@ void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<doub
     graphForRun->SetLineColor(lineColor);
     lineColor += 1;
     if (lineColor >= 100) lineColor = 51;
-
-    /*if (firstGraph) {
-      graphForRun->Draw("al");
-    } else {
-      graphForRun->Draw("l same");
-    }*/
-    firstGraph = false;
 
     legend->AddEntry(graphForRun,TString::Format("%d", run),"l");
   }
@@ -1091,15 +1044,14 @@ void printReport()
         intervalsToBeAggregated.push_back(std::make_pair(min, max));
 
         if (false) {
-          TDatime daTime;
-          daTime.Set(min/1000);
-          int hourMin = daTime.GetHour();
-          int minuteMin = daTime.GetMinute();
-          int secondMin = daTime.GetSecond();
-          daTime.Set(max/1000);
-          int hourMax = daTime.GetHour();
-          int minuteMax = daTime.GetMinute();
-          int secondMax = daTime.GetSecond();
+          auto validityMin = getLocalTime(min, "Europe/Paris");
+          auto hourMin = getHour(validityMin);
+          auto minuteMin = getMinute(validityMin);
+          auto secondMin = getSecond(validityMin);
+          auto validityMax = getLocalTime(max, "Europe/Paris");
+          auto hourMax = getHour(validityMax);
+          auto minuteMax = getMinute(validityMax);
+          auto secondMax = getSecond(validityMax);
 
           std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d] for plot \"%s\"\n",
               min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax, plotName.c_str()).Data();
@@ -1138,15 +1090,14 @@ void printReport()
     }
 
     for (auto& [min, max] : aggregatedIntervals) {
-      TDatime daTime;
-      daTime.Set(min/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      int secondMin = daTime.GetSecond();
-      daTime.Set(max/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
-      int secondMax = daTime.GetSecond();
+      auto validityMin = getLocalTime(min, "Europe/Paris");
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto secondMin = getSecond(validityMin);
+      auto validityMax = getLocalTime(max, "Europe/Paris");
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+      auto secondMax = getSecond(validityMax);
 
       std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n",
           min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
@@ -1231,13 +1182,14 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   std::vector<std::string> rootFileNames;
   std::vector<std::shared_ptr<TFile>> rootFiles;
   for (auto runNumber : runNumbers) {
-    //std::cout << "  run " << inputRun.second.get_value<int>() << std::endl;
+    std::cout << "  run " << runNumber << std::endl;
     std::string inputFilePath = std::string("inputs/") + year + "/" + period + "/" + pass + "/"
         + std::to_string(runNumber) + "/";
     TSystemDirectory inputDir("", inputFilePath.c_str());
     //std::cout << "Listing contents of " << inputFilePath << std::endl;
     TList* inputFiles = inputDir.GetListOfFiles();
     if (!inputFiles) {
+      std::cout << "Input ROOT file not found for run " << runNumber << ": \"" << inputFilePath << "\"" << std::endl;
       continue;
     }
     for (TObject* inputFile : (*inputFiles)) {

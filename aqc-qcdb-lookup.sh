@@ -7,5 +7,5 @@ export SCRIPTDIR=$(readlink -f $(dirname $0))
 RUNS_CONFIG="$1"
 PLOTS_CONFIG="$2"
 
-echo "root -b -q \"aqc_qcdb_lookup.C(\\\"${RUNS_CONFIG}\\\")\""
-root -b -q "aqc_qcdb_lookup.C(\"${RUNS_CONFIG}\")" #>& "outputs/${ID}/log.txt"
+echo "root -l -b -q \"aqc_qcdb_lookup.C(\\\"${RUNS_CONFIG}\\\")\""
+root -l -b -q "aqc_qcdb_lookup.C(\"${RUNS_CONFIG}\")" #>& "outputs/${ID}/log.txt"

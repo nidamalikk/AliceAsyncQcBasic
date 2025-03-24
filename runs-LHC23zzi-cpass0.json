@@ -1,0 +1,17 @@
+{
+  "type": "data",
+  "year": "2023",
+  "period": "LHC23zzi",
+  "pass": "cpass0",
+  "beamType": "Pb-Pb",
+  "": "the beam type can be pp or Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    544184, 544185, 544389, 544390, 544391, 544392
+  ],
+  "productionStart": "2025-03-14 20:00:00",
+  "runs": [
+    544184, 544185, 544389, 544390, 544391, 544392
+  ],
+  "referenceRuns": []
+}

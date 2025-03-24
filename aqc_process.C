@@ -747,6 +747,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
     int lineColor = 51;
     bool first = true;
+    int nBadPlots = 0;
     for (auto& mo : moVec) {
       TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
       //std::cout << "histTemp: " << histTemp << "  entries: " << histTemp->GetEntries() << std::endl;
@@ -896,6 +897,8 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
             << std::endl;
 
         badTimeIntervals[mo->getActivity().mId][plotConfig.plotName].insert(std::make_pair<long, long>(mo->getValidity().getMin(), mo->getValidity().getMax()));
+
+        nBadPlots += 1;
       }
 
       if (mo->getActivity().mId == refRunNumber) {
@@ -927,6 +930,17 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     }
 
     canvas.padRight->cd();
+    if (nBadPlots > 0) {
+      legend->SetHeader("Bad time intervals:");
+      TLegendEntry *header = (TLegendEntry*)legend->GetListOfPrimitives()->First();
+      header->SetTextColor(kRed);
+      header->SetTextSize(.08);
+    } else {
+      legend->SetHeader("All plots are GOOD", "C");
+      TLegendEntry *header = (TLegendEntry*)legend->GetListOfPrimitives()->First();
+      header->SetTextColor(kGreen + 2);
+      header->SetTextSize(.08);
+   }
     legend->Draw();
 
     if (firstPage) canvas.canvas->SaveAs((outputFileName + "(").c_str());

@@ -250,7 +250,7 @@ bool splitPlotPath(std::string plotPath, std::array<std::string, 4>& plotPathSpl
 
   return true;
 }
-
+/*
 using DateTime = std::pair<std::chrono::year_month_day, std::chrono::hh_mm_ss<std::chrono::milliseconds>>;
 
 DateTime getLocalTime(uint64_t timeStamp, const char* timeZone)
@@ -291,7 +291,7 @@ int getSecond(DateTime dateTime)
 {
   return dateTime.second.seconds().count();
 }
-
+*/
 int getReferenceRunForRate(double rate)
 {
   int result = 0;

@@ -1,0 +1,14 @@
+{
+  "type": "sim",
+  "year": "2025",
+  "period": "LHC25b4a",
+  "pass": "0",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "productionRuns": [
+    559348, 559361, 559362, 559385, 559387
+  ],
+  "productionStart": "2025-02-17 12:00:00",
+  "runs": [
+  ]
+}

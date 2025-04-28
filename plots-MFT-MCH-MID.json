@@ -1,0 +1,38 @@
+{
+    "id": "test",
+    "plots": [
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackEta",
+            "checkThreshold": 0.05,
+            "maxBadBinsFrac": 0.05,
+            "checkRangeMin": -3.29,
+            "checkRangeMax": -2.51,
+            "checkDeviationNsigma": 2.0,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackPhi",
+            "checkThreshold": 0.1,
+            "checkDeviationNsigma": 2.0,
+            "maxBadBinsFrac": 0.1,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "GLO",
+            "task": "MUONTracksMFT",
+            "name": "MFT-MCH-MID/WithCuts/TrackPt",
+            "checkThreshold": 0.05,
+            "maxBadBinsFrac": 0.05,
+            "checkRangeMin": 0.5,
+            "checkRangeMax": 2.0,
+            "checkDeviationNsigma": 2.0,
+            "drawOptions": "H",
+            "logx": true,
+            "logy": false
+        }
+    ]
+}

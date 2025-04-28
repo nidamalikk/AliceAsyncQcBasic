@@ -5,12 +5,16 @@
             "detector": "MCH",
             "task": "Clusters",
             "name": "ClustersPerChamber",
+            "checkThreshold": 0.1,
+            "checkDeviationNsigma": 2.0,
+            "maxBadBinsFrac": 0.05,
             "drawOptions": "H"
         },
         {
             "detector": "MCH",
             "task": "Clusters",
             "name": "ClusterSizePerChamber",
+            "checkDeviationNsigma": 2.0,
             "drawOptions": "H"
         },
         {
@@ -21,6 +25,7 @@
             "maxBadBinsFrac": 0.1,
             "checkRangeMin": -3.9,
             "checkRangeMax": -2.51,
+            "checkDeviationNsigma": 2.0,
             "drawOptions": "H"
         },
         {
@@ -28,6 +33,7 @@
             "task": "Tracks",
             "name": "WithCuts/TrackPhi",
             "checkThreshold": 0.1,
+            "checkDeviationNsigma": 2.0,
             "maxBadBinsFrac": 0.1,
             "drawOptions": "H"
         },
@@ -38,7 +44,8 @@
             "checkThreshold": 0.1,
             "maxBadBinsFrac": 0.1,
             "checkRangeMin": 0.5,
-            "checkRangeMax": 3.0,
+            "checkRangeMax": 1.5,
+            "checkDeviationNsigma": 2.0,
             "drawOptions": "H",
             "logx": true,
             "logy": false

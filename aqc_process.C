@@ -55,6 +55,7 @@ struct PlotConfig
   double checkRangeMin;
   double checkRangeMax;
   double checkThreshold;
+  double checkDeviationNsigma;
   double maxBadBinsFrac;
   bool normalize;
 };
@@ -680,6 +681,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
   double checkThreshold = plotConfig.checkThreshold;
+  double checkDeviationNsigma = plotConfig.checkDeviationNsigma;
   double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
   bool logx = plotConfig.logx;
   bool logy = plotConfig.logy;
@@ -777,6 +779,12 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       //std::cout << "histTemp: " << histTemp << "  entries: " << histTemp->GetEntries() << std::endl;
       if (!histTemp) continue;
 
+      // Convert TProfile plots into histograms to get correct errors for the ratios
+      if (dynamic_cast<TProfile*>(histTemp)) {
+        TProfile* hp = dynamic_cast<TProfile*>(histTemp);
+        histTemp = hp->ProjectionX((std::string(histTemp->GetName()) + "_px").c_str());
+      }
+
       if (projection == "x") {
         TH2* h2 = dynamic_cast<TH2*>(histTemp);
         if (h2) {
@@ -842,6 +850,11 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         TH1* histRatio = (TH1*)histTemp->Clone("_ratio");
 
         TH1* histReference = (TH1*)denominatorHist->Clone("_clone");
+        if (dynamic_cast<TProfile*>(histReference)) {
+          TProfile* hp = dynamic_cast<TProfile*>(histReference);
+          histReference = hp->ProjectionX((std::string(histReference->GetName()) + "_px").c_str());
+        }
+
         if (projection == "x") {
           TH2* h2 = dynamic_cast<TH2*>(histReference);
           if (h2) {
@@ -858,7 +871,6 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
         normalizeHistogram(histReference, checkRangeMin, checkRangeMax);
         histRatio->Divide(histReference);
-
         histRatio->SetTitle("");
         histRatio->SetTitleSize(0);
         histRatio->GetXaxis()->SetLabelSize(labelSize);
@@ -892,8 +904,24 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
           nBinsChecked += 1;
           double ratio = histRatio->GetBinContent(bin);
+          double error = histRatio->GetBinError(bin);
           double deviation = std::fabs(ratio - 1.0);
-          if (deviation > checkThreshold) {
+          double threshold = checkThreshold + error * checkDeviationNsigma;
+          if (mo->getActivity().mId == 5598020) {
+            std::cout << "[TOTO]: bin=" << bin
+                << "  ratio=" << ratio
+                << "  error num=" << hist->GetBinError(bin)
+                << "  den=" << histReference->GetBinError(bin)
+                << "  ratio=" << error << std::endl;
+          std::cout << "[TOTO]: bin=" << bin
+              << "  deviation=" << deviation
+              << "  threshold=" << threshold
+              << std::endl;
+          }
+          if (deviation > threshold) {
+            if (mo->getActivity().mId == 5598020) {
+            std::cout << "[TOTO]: bad bin" << std::endl;
+            }
             nBinsBad += 1;
           }
         }
@@ -1303,6 +1331,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
                         config.value("checkRangeMin", double(0.0)),
                         config.value("checkRangeMax", double(0.0)),
                         config.value("checkThreshold", double(0.1)),
+                        config.value("checkDeviationNsigma", double(2.0)),
                         config.value("maxBadBinsFrac", double(0.1)),
                         config.value("normalize", true)
       });
@@ -1354,6 +1383,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
                         config.value("checkRangeMin", double(0.0)),
                         config.value("checkRangeMax", double(0.0)),
                         config.value("checkThreshold", double(0.1)),
+                        config.value("checkDeviationNsigma", double(2.0)),
                         config.value("maxBadBinsFrac", double(0.1)),
                         config.value("normalize", true)
       });

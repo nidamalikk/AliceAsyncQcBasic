@@ -23,7 +23,7 @@
             "name": "WithCuts/TrackEta",
             "checkThreshold": 0.1,
             "maxBadBinsFrac": 0.1,
-            "checkRangeMin": -3.9,
+            "checkRangeMin": -3.99,
             "checkRangeMax": -2.51,
             "checkDeviationNsigma": 2.0,
             "drawOptions": "H"

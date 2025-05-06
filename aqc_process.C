@@ -658,7 +658,7 @@ void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<in
   c.SaveAs((outputFileName + ")").c_str());
 }
 
-double getNornalizationFactor(TH1* hist, double xmin, double xmax)
+double getNormalizationFactor(TH1* hist, double xmin, double xmax)
 {
   if (xmin != xmax) {
     int binMin = hist->GetXaxis()->FindBin(xmin);
@@ -673,7 +673,7 @@ double getNornalizationFactor(TH1* hist, double xmin, double xmax)
 
 void normalizeHistogram(TH1* hist, double xmin, double xmax)
 {
-  hist->Scale(getNornalizationFactor(hist, xmin, xmax));
+  hist->Scale(getNormalizationFactor(hist, xmin, xmax));
 }
 
 void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
@@ -752,13 +752,14 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       }
 
       if (!averageHist) {
-        averageHist = (TH1*)histTemp->Clone("_average");
+        averageHist = new TH1D(TString::Format("%s_average", histTemp->GetName()), histTemp->GetTitle(),
+            histTemp->GetXaxis()->GetNbins(), histTemp->GetXaxis()->GetXmin(), histTemp->GetXaxis()->GetXmax());
+        averageHist->Add(histTemp);
         normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
       } else {
-        averageHist->Add(histTemp, getNornalizationFactor(histTemp, checkRangeMin, checkRangeMax));
+        averageHist->Add(histTemp, getNormalizationFactor(histTemp, checkRangeMin, checkRangeMax));
       }
     }
-
 
     // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;

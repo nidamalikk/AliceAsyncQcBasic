@@ -1,0 +1,16 @@
+{
+  "type": "data",
+  "year": "2022",
+  "period": "LHC22e",
+  "pass": "apass5",
+  "beamType": "pp", "": "the beam type can be pp or Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    519504, 519507, 519903, 519904, 519905, 519906
+  ],
+  "productionStart": "2025-04-23 00:00:00",
+  "runs": [
+  ],
+  "referenceRuns": [
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "type": "data",
+  "year": "2025",
+  "period": "LHC25aa",
+  "pass": "cpass0",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "productionRuns": [
+    
+  ],
+  "productionStart": "2025-05-11 11:00:00",
+  "runs": [
+  ]
+}
